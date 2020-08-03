@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>2010-2020 各縣市登革熱病例分佈</title>
+</head>
+<body>
+<h1>2010-2020 各縣市登革熱病例分佈</h1>
+<script src="https://d3js.org/d3.v5.js"></script>
+<script type="text/javascript">
+
+  // Setup svg using Bostock's margin convention
+
+  var margin = {
+    top: 20,
+    right: 160,
+    bottom: 35,
+    left: 30
+  };
+
+  var width = 960 - margin.left - margin.right,
+    height = 500 - margin.top - margin.bottom;
+
+  var svg = d3.select("body")
+    .append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+  // 分類=城市列表
+  var subgroupsArr = [
+    {
+      key: "KaohsiungCity",
+      label: "高雄市"
+    },
+    {
+      key: "TainanCity",
+      label: "台南市"
+    },
+    {
+      key: "TaipeiCity",
+      label: "台北市"
+    },
+    {
+      key: "NewTaipeiCity",
+      label: "新北市"
+    },
+    {
+      key: "TaoyuanCity",
+      label: "桃園市"
+    },
+    {
+      key: "TaichungCity",
+      label: "台中市"
+    },
+    {
+      key: "HsinChuCounty",
+      label: "新竹縣"
+    },
+    {
+      key: "MiaoliCounty",
+      label: "苗栗縣"
+    },
+    {
+      key: "ChanghuaCounty",
+      label: "彰化縣"
+    },
+    {
+      key: "NantouCounty",
+      label: "南投縣"
+    },
+    {
+      key: "YunlinCounty",
+      label: "雲林縣"
+    },
+    {
+      key: "ChiayiCounty",
+      label: "嘉義縣"
+    },
+    {
+      key: "PingtungCounty",
+      label: "屏東縣"
+    },
+    {
+      key: "YilanCounty",
+      label: "宜蘭縣"
+    },
+    {
+      key: "HualienCounty",
+      label: "花蓮縣"
+    },
+    {
+      key: "TaitungCounty",
+      label: "台東縣"
+    },
+    {
+      key: "PenghuCounty",
+      label: "澎湖縣"
+    },
+    {
+      key: "KinmenCounty",
+      label: "金門縣"
+    },
+    {
+      key: "LienchiangCounty",
+      label: "連江縣"
+    },
+    {
+      key: "KeelungCity",
+      label: "基隆市"
+    },
+    {
+      key: "HsinchuCity",
+      label: "新竹市"
+    },
+    {
+      key: "ChiayiCity",
+      label: "嘉義市"
+    }
+  ];
+
+  var getColor = d3.scaleOrdinal(d3.schemePaired);
+  var parseTime = d3.timeParse("%Y");
+
+  d3.csv("https://gist.githubusercontent.com/leannechen/515aff57ba7a72fec4a10f8e37ed743d/raw/6065657f60f42549214a44dd42066daff7d0807f/dengue-cases_2010-2020.csv")
+    .then(function(res) {
+
+      const yearList = ["2010", "2011", "2012","2013", "2014", "2015", "2016", "2017", "2018", "2019", "2020"];
+      // todo: city, county naming 統一
+      const casesByYear = yearList.reduce((acc, year) => {
+        const casesOfTheYear = res.filter((caseItem) => caseItem.date.startsWith(year));
+        const caseCountsByArea = subgroupsArr.reduce((acc, area) => {
+          const caseCountOfTheArea = casesOfTheYear
+            .filter((caseItem) => caseItem.county === area.label)
+            .length;
+
+          return {
+            ...acc,
+            [area.key]: caseCountOfTheArea,
+          }
+        }, {});
+
+        return [
+          ...acc,
+          {
+            year: year,
+            ...caseCountsByArea,
+          }
+        ]
+      }, []);
+
+      drawGraph(casesByYear);
+
+    })
+    .catch(function(error){
+      console.log(error);
+    })
+  ;
+
+  function drawGraph(data) {
+    // Transpose the data into layers
+    var dataset = d3
+      .stack()
+      .keys(subgroupsArr.map((area) => area.key))(data)
+      .map(function(area) {
+        const areaCounts = data.map(function(d, index) {
+          return {
+            x: parseTime(d.year),
+            y0: area[index][0],
+            y: area[index][1], // y = y0+offset 跟前版不一樣，前版 y=offset
+          };
+        });
+        areaCounts.key = area.key;
+        return areaCounts;
+      });
+
+    // Set x, y and colors
+
+    var x = d3.scaleBand()
+      .domain(dataset[0].map(function(d) { return d.x; }))
+      .rangeRound([10, width-10])
+      .padding(0.02);
+
+    var y = d3.scaleLinear()
+      .domain([0, d3.max(dataset, function(d) {
+        return d3.max(d,
+          function(d) {
+            return d.y;
+          });
+      })])
+      .range([height, 0]);
+
+    // Define and draw axes
+    var yAxis = d3.axisLeft(y)
+      .ticks(5)
+      .tickSize(-width, 0, 0)
+      .tickFormat( function(d) { return d } );
+
+    var xAxis = d3.axisBottom(x)
+      .tickFormat(d3.timeFormat("%Y"));
+
+    function customYAxis(g) {
+      g.call(yAxis);
+      g.select(".domain").remove();
+      g.selectAll(".tick:not(:first-of-type) line")
+        .attr("stroke", "#6a6d6f")
+        .attr("stroke-dasharray", "2,2");
+      g.selectAll(".tick text")
+        .attr("x", 8)
+        .attr("dy", -4);
+    }
+
+    svg.append("g")
+      .attr("class", "y axis")
+      .call(customYAxis);
+
+    svg.append("g")
+      .attr("class", "x axis")
+      .attr("transform", "translate(0," + height + ")")
+      .call(xAxis);
+
+
+    // Create groups for each series, rects for each segment
+    var groups = svg.selectAll("g.cost")
+      .data(dataset)
+      .enter()
+      .append("g")
+      .attr("class", "cost")
+      .style("fill", function(d, i) {
+        return getColor(i);
+      });
+
+    var rect = groups.selectAll("rect")
+      .data(function(d) { return d; })
+      .enter()
+      .append("rect")
+      .attr("x", function(d) { return x(d.x); })
+      .attr("y", function(d) { return y(d.y); })
+      .attr("height", function(d) { return y(d.y0) - y(d.y); })
+      .attr("width", x.bandwidth())
+      .on("mouseover", function() { tooltip.style("display", null); })
+      .on("mouseout", function() { tooltip.style("display", "none"); })
+      .on("mousemove", function(d) {
+        var xPosition = d3.mouse(this)[0] - 15;
+        var yPosition = d3.mouse(this)[1] - 25;
+        tooltip.attr("transform", "translate(" + xPosition + "," + yPosition + ")");
+        tooltip.select("text").text(d.y - d.y0);
+      });
+
+
+    // Draw legend
+    var legend = svg.selectAll(".legend")
+      .data(subgroupsArr)
+      .enter()
+      .append("g")
+      .attr("class", "legend")
+      .attr("transform", function(d, i) { return "translate(30," + i * 19 + ")"; });
+
+    legend.append("rect")
+      .attr("x", width - 18)
+      .attr("width", 18)
+      .attr("height", 18)
+      .style("fill", function(d, i) {
+        return getColor(i);
+      });
+
+    legend.append("text")
+      .attr("x", width + 5)
+      .attr("y", 9)
+      .attr("dy", ".35em")
+      .style("text-anchor", "start")
+      .text(function(d) {
+        return d.label;
+      });
+
+
+    // Prep the tooltip bits, initial display is hidden
+    var tooltip = svg.append("g")
+      .attr("class", "tooltip")
+      .style("display", "none");
+
+    tooltip.append("rect")
+      .attr("width", 30)
+      .attr("height", 20)
+      .attr("fill", "white")
+      .style("opacity", 0.5);
+
+    tooltip.append("text")
+      .attr("x", 15)
+      .attr("dy", "1.2em")
+      .style("text-anchor", "middle")
+      .attr("font-size", "12px")
+      .attr("font-weight", "bold");
+  }
+
+</script>
+</body>
+</html>
